@@ -88,7 +88,8 @@ def build_clock_image(
     left_width = draw_dummy.textlength(left_text, font=font)
     right_width = draw_dummy.textlength(right_text, font=font)
     colon_width = draw_dummy.textlength(":", font=font) if right_text else 0
-    total_width = max(1, int(round(left_width + colon_width + right_width)))
+    extra_gap = 1 if right_text else 0
+    total_width = max(1, int(round(left_width + colon_width + extra_gap + right_width)))
     max_height = max(left_segment.height, right_segment.height, 1)
 
     frame = Image.new("RGBA", canvas, tuple(background) + (255,))
@@ -99,7 +100,10 @@ def build_clock_image(
     if right_text:
         frame.alpha_composite(
             right_segment,
-            (base_x + int(round(left_width + colon_width)) - right_bbox[0], base_y - right_bbox[1])
+            (
+                base_x + int(round(left_width + colon_width + extra_gap)) - right_bbox[0],
+                base_y - right_bbox[1],
+            ),
         )
 
     frame_rgb = frame.convert("RGB")
