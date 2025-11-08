@@ -73,6 +73,7 @@ class DeviceConfig:
     rotate: int = 0
     brightness: float = 0.85
     timezone: str = "auto"
+    scan_timeout: float = 6.0
 
 
 @dataclass
@@ -134,6 +135,7 @@ DEFAULTS: Dict[str, Any] = {
         "rotate": 0,
         "brightness": 0.85,
         "timezone": "auto",
+        "scan_timeout": 6.0,
     },
     "panels": {
         "tile_width": 32,
@@ -307,9 +309,10 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     device_data = merged.get("device", {})
     device = DeviceConfig(**device_data)
     brightness = _clamp(device.brightness, 0.1, 1.0)
+    scan_timeout = max(1.0, device.scan_timeout)
     if device.rotate not in {0, 90, 180, 270}:
         device = replace(device, rotate=0)
-    device = replace(device, brightness=brightness)
+    device = replace(device, brightness=brightness, scan_timeout=scan_timeout)
     env_address = os.getenv("BK_LIGHT_ADDRESS")
     if env_address:
         device = replace(device, address=env_address)

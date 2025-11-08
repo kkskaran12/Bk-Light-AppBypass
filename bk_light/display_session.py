@@ -3,7 +3,7 @@ import binascii
 import os
 from io import BytesIO
 from typing import Optional
-from bleak import BleakClient
+from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakError
 from PIL import Image, ImageEnhance
 
@@ -95,6 +95,7 @@ class BleDisplaySession:
         mtu: int = 512,
         log_notifications: bool = False,
         max_retries: int = 3,
+        scan_timeout: float = 6.0,
     ) -> None:
         resolved = address or DEFAULT_ADDRESS
         if not resolved:
@@ -107,6 +108,7 @@ class BleDisplaySession:
         self.mtu = mtu
         self.log_notifications = log_notifications
         self.max_retries = max_retries
+        self.scan_timeout = scan_timeout
         self.client: Optional[BleakClient] = None
         self.watcher = AckWatcher(log_notifications)
 
@@ -135,7 +137,26 @@ class BleDisplaySession:
                     return
                 if self.client:
                     await self._safe_disconnect()
-                self.client = BleakClient(self.address)
+                try:
+                    device = await BleakScanner.find_device_by_address(
+                        self.address, timeout=self.scan_timeout, cached=False
+                    )
+                except TypeError:
+                    device = await BleakScanner.find_device_by_address(
+                        self.address, timeout=self.scan_timeout
+                    )
+                if device is None:
+                    try:
+                        device = await BleakScanner.find_device_by_address(
+                            self.address, timeout=self.scan_timeout, cached=True
+                        )
+                    except TypeError:
+                        device = await BleakScanner.find_device_by_address(
+                            self.address, timeout=self.scan_timeout
+                        )
+                if device is None:
+                    raise BleakError(f"Device with address {self.address} was not found")
+                self.client = BleakClient(device)
                 self.watcher = AckWatcher(self.log_notifications)
                 await self.client.connect()
                 if not self.client.is_connected:
@@ -186,7 +207,7 @@ class BleDisplaySession:
                 await self.client.write_gatt_char(UUID_WRITE, frame, response=True)
                 await wait_for_ack(self.watcher.stage_three, "FRAME_ACK", self.log_notifications)
                 await asyncio.sleep(delay)
-                await self.client.write_gatt_char(UUID_WRITE, FRAME_VALIDATION, response=False)
+                # await self.client.write_gatt_char(UUID_WRITE, FRAME_VALIDATION, response=False)
                 return
             except (asyncio.TimeoutError, BleakError, ConnectionError) as error:
                 if not self.auto_reconnect or attempt > self.max_retries:

@@ -6,6 +6,7 @@ device:
   rotate: 0
   brightness: 0.85
   timezone: auto
+  scan_timeout: 6.0
 
 panels:
   tile_width: 32

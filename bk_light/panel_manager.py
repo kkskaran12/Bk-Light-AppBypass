@@ -56,6 +56,7 @@ class PanelManager:
             mtu=self.config.device.mtu,
             log_notifications=self.config.display.log_notifications,
             max_retries=self.config.display.max_retries,
+            scan_timeout=self.config.device.scan_timeout,
         )
         await session.__aenter__()
         self.sessions.append(PanelSession(None, session))
@@ -74,6 +75,7 @@ class PanelManager:
                 mtu=self.config.device.mtu,
                 log_notifications=self.config.display.log_notifications,
                 max_retries=self.config.display.max_retries,
+                scan_timeout=self.config.device.scan_timeout,
             )
             tasks.append(self._connect_panel(descriptor, session))
         await asyncio.gather(*tasks)
