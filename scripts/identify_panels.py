@@ -19,20 +19,35 @@ def build_panel_image(
     number: int,
     tile_width: int,
     tile_height: int,
-    color: tuple[int, int, int] = (255, 120, 0),
+    color: tuple[int, int, int],
+    antialias: bool,
 ) -> bytes:
-    image = Image.new("RGB", (tile_width, tile_height), (0, 0, 0))
-    draw = ImageDraw.Draw(image)
+    background = (0, 0, 0)
     font = ImageFont.load_default()
+    dummy = Image.new("L", (1, 1), 0)
+    draw_dummy = ImageDraw.Draw(dummy)
     text = str(number)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    width = bbox[2] - bbox[0]
-    height = bbox[3] - bbox[1]
-    origin = ((tile_width - width) / 2, (tile_height - height) / 2)
-    draw.text(origin, text, fill=color, font=font)
+    bbox = draw_dummy.textbbox((0, 0), text, font=font)
+    width = max(1, bbox[2] - bbox[0])
+    height = max(1, bbox[3] - bbox[1])
+    mask_mode = "L" if antialias else "1"
+    mask = Image.new(mask_mode, (width, height), 0)
+    draw_mask = ImageDraw.Draw(mask)
+    draw_mask.text((-bbox[0], -bbox[1]), text, fill=255, font=font)
+    if not antialias:
+        mask = mask.convert("L")
+    text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    fill_layer = Image.new("RGBA", (width, height), (*color, 255))
+    text_layer = Image.composite(fill_layer, text_layer, mask)
+    frame = Image.new("RGBA", (tile_width, tile_height), tuple(background) + (255,))
+    origin_x = int((tile_width - width) / 2 - bbox[0])
+    origin_y = int((tile_height - height) / 2 - bbox[1])
+    frame.alpha_composite(text_layer, (origin_x, origin_y))
+    frame_rgb = frame.convert("RGB")
+    draw = ImageDraw.Draw(frame_rgb)
     draw.rectangle((0, 0, tile_width - 1, tile_height - 1), outline=(50, 50, 50))
     buffer = BytesIO()
-    image.save(buffer, format="PNG", optimize=False)
+    frame_rgb.save(buffer, format="PNG", optimize=False)
     return buffer.getvalue()
 
 
@@ -50,7 +65,14 @@ async def display_panel(index: int, descriptor: PanelDescriptor, config: AppConf
     )
     try:
         async with session:
-            payload = build_panel_image(index, config.panels.tile_width, config.panels.tile_height)
+            color = (255, 120, 0)
+            payload = build_panel_image(
+                index,
+                config.panels.tile_width,
+                config.panels.tile_height,
+                color,
+                config.display.antialias_text,
+            )
             await session.send_png(payload, delay=0.1)
             print(f"[{index}] {descriptor.name} @ {descriptor.address} (grid {descriptor.grid_x}, {descriptor.grid_y})")
             await asyncio.to_thread(input, "Press Enter to continue...")

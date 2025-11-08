@@ -40,17 +40,29 @@ def build_counter_image(
     background: tuple[int, int, int],
     font_path: Optional[Path],
     size: int,
+    antialias: bool,
 ) -> Image.Image:
-    image = Image.new("RGB", canvas, background)
-    draw = ImageDraw.Draw(image)
     font = load_font(font_path, size)
     text = str(value)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    width = bbox[2] - bbox[0]
-    height = bbox[3] - bbox[1]
-    origin = ((canvas[0] - width) / 2, (canvas[1] - height) / 2)
-    draw.text(origin, text, fill=color, font=font)
-    return image
+    dummy = Image.new("L", (1, 1), 0)
+    draw_dummy = ImageDraw.Draw(dummy)
+    bbox = draw_dummy.textbbox((0, 0), text, font=font)
+    width = max(1, bbox[2] - bbox[0])
+    height = max(1, bbox[3] - bbox[1])
+    mask_mode = "L" if antialias else "1"
+    mask = Image.new(mask_mode, (width, height), 0)
+    draw_mask = ImageDraw.Draw(mask)
+    draw_mask.text((-bbox[0], -bbox[1]), text, fill=255, font=font)
+    if not antialias:
+        mask = mask.convert("L")
+    text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    fill_layer = Image.new("RGBA", (width, height), (*color, 255))
+    text_layer = Image.composite(fill_layer, text_layer, mask)
+    frame = Image.new("RGBA", canvas, tuple(background) + (255,))
+    origin_x = int((canvas[0] - width) / 2 - bbox[0])
+    origin_y = int((canvas[1] - height) / 2 - bbox[1])
+    frame.alpha_composite(text_layer, (origin_x, origin_y))
+    return frame.convert("RGB")
 
 
 async def run_counter(config: AppConfig, preset_name: str, overrides: dict[str, Optional[str]]) -> None:
@@ -70,7 +82,15 @@ async def run_counter(config: AppConfig, preset_name: str, overrides: dict[str, 
         canvas = manager.canvas_size
         value = start_value
         for _ in range(total):
-            image = build_counter_image(canvas, value, color, background, font_path, size)
+            image = build_counter_image(
+                canvas,
+                value,
+                color,
+                background,
+                font_path,
+                size,
+                config.display.antialias_text,
+            )
             await manager.send_image(image, delay=0.15)
             value += 1
             await asyncio.sleep(interval)

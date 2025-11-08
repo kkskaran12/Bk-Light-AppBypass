@@ -56,22 +56,34 @@ def build_clock_image(
     font_path: Optional[Path],
     size: int,
     colon_visible: bool,
+    antialias: bool,
 ) -> Image.Image:
-    image = Image.new("RGB", canvas, background)
-    draw = ImageDraw.Draw(image)
     font = load_font(font_path, size)
     display_text = text if colon_visible else text.replace(":", " ")
-    bbox = draw.textbbox((0, 0), display_text, font=font)
-    width = bbox[2] - bbox[0]
-    height = bbox[3] - bbox[1]
-    origin_x = (canvas[0] - width) / 2 - bbox[0]
-    origin_y = (canvas[1] - height) / 2 - bbox[1]
-    draw.text((origin_x, origin_y), display_text, fill=color, font=font)
+    dummy = Image.new("L", (1, 1), 0)
+    draw_dummy = ImageDraw.Draw(dummy)
+    bbox = draw_dummy.textbbox((0, 0), display_text, font=font)
+    width = max(1, bbox[2] - bbox[0])
+    height = max(1, bbox[3] - bbox[1])
+    mask_mode = "L" if antialias else "1"
+    mask = Image.new(mask_mode, (width, height), 0)
+    draw_mask = ImageDraw.Draw(mask)
+    draw_mask.text((-bbox[0], -bbox[1]), display_text, fill=255, font=font)
+    if not antialias:
+        mask = mask.convert("L")
+    text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    fill_layer = Image.new("RGBA", (width, height), (*color, 255))
+    text_layer = Image.composite(fill_layer, text_layer, mask)
+    frame = Image.new("RGBA", canvas, tuple(background) + (255,))
+    origin_x = int((canvas[0] - width) / 2 - bbox[0])
+    origin_y = int((canvas[1] - height) / 2 - bbox[1])
+    frame.alpha_composite(text_layer, (origin_x, origin_y))
+    frame_rgb = frame.convert("RGB")
     if colon_visible and ":" in text:
         left = text.split(":")[0]
-        left_width = draw.textlength(left, font=font)
+        left_width = draw_dummy.textlength(left, font=font)
         colon_x = origin_x + left_width + 1.5
-        digit_bbox = draw.textbbox((0, 0), "0", font=font)
+        digit_bbox = draw_dummy.textbbox((0, 0), "0", font=font)
         digit_height = digit_bbox[3] - digit_bbox[1]
         baseline = origin_y + digit_bbox[1] + digit_height / 2
         gap = digit_height * 0.35
@@ -81,8 +93,8 @@ def build_clock_image(
         colon_column = max(0, min(canvas[0] - 1, colon_column))
         for row in (top, bottom):
             if 0 <= row < canvas[1]:
-                image.putpixel((colon_column, row), accent)
-    return image
+                frame_rgb.putpixel((colon_column, row), accent)
+    return frame_rgb
 
 
 async def run_clock(config: AppConfig, preset_name: str, overrides: dict[str, Optional[str]]) -> None:
@@ -124,6 +136,7 @@ async def run_clock(config: AppConfig, preset_name: str, overrides: dict[str, Op
                         font_path,
                         preset.size,
                         colon_visible,
+                        config.display.antialias_text,
                     )
                     await manager.send_image(image, delay=0.15)
                     last_stamp = stamp

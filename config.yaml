@@ -22,13 +22,19 @@ display:
   log_notifications: false
   antialias_text: false
 
+# runtime:
+#   mode: text
+#   preset: marquee_left
+#   options:
+#     text: "Puparia"
+#     color: "#00FFAA"
+#     background: "#000000"
+
 runtime:
-  mode: text
-  preset: marquee_left
+  mode: clock
+  preset: default
   options:
-    text: "Puparia"
-    color: "#00FFAA"
-    background: "#000000"
+    timezone: "Europe/Paris"
     
 presets:
   clock:
