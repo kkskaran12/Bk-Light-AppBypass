@@ -55,6 +55,7 @@ class PanelManager:
             brightness=self.config.device.brightness,
             mtu=self.config.device.mtu,
             log_notifications=self.config.display.log_notifications,
+            max_retries=self.config.display.max_retries,
         )
         await session.__aenter__()
         self.sessions.append(PanelSession(None, session))
@@ -72,6 +73,7 @@ class PanelManager:
                 brightness=brightness,
                 mtu=self.config.device.mtu,
                 log_notifications=self.config.display.log_notifications,
+                max_retries=self.config.display.max_retries,
             )
             tasks.append(self._connect_panel(descriptor, session))
         await asyncio.gather(*tasks)

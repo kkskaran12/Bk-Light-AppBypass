@@ -1,10 +1,16 @@
 import argparse
 import asyncio
+import sys
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
+
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
+
 from bk_light.config import AppConfig, clock_options, load_config
 from bk_light.panel_manager import PanelManager
 
@@ -69,10 +75,13 @@ def build_clock_image(
         digit_height = digit_bbox[3] - digit_bbox[1]
         baseline = origin_y + digit_bbox[1] + digit_height / 2
         gap = digit_height * 0.35
+        colon_column = int(round(colon_x))
         top = int(round(baseline - gap))
         bottom = int(round(baseline + gap))
-        draw.point((int(round(colon_x)), top), fill=accent)
-        draw.point((int(round(colon_x)), bottom), fill=accent)
+        colon_column = max(0, min(canvas[0] - 1, colon_column))
+        for row in (top, bottom):
+            if 0 <= row < canvas[1]:
+                image.putpixel((colon_column, row), accent)
     return image
 
 
@@ -90,35 +99,40 @@ async def run_clock(config: AppConfig, preset_name: str, overrides: dict[str, Op
     last_colon = True
     loop = asyncio.get_running_loop()
     start_time = loop.time()
-    async with PanelManager(config) as manager:
-        canvas = manager.canvas_size
-        while True:
-            now = datetime.now(tz)
-            if preset.format == "12h":
-                stamp = now.strftime("%I:%M")
-                if stamp.startswith("0"):
-                    stamp = stamp[1:]
-            else:
-                stamp = now.strftime("%H:%M")
-            elapsed = loop.time() - start_time
-            colon_visible = True
-            if dot_flashing:
-                colon_visible = int(elapsed / flash_period) % 2 == 0
-            if stamp != last_stamp or colon_visible != last_colon:
-                image = build_clock_image(
-                    canvas,
-                    stamp,
-                    color,
-                    accent,
-                    background,
-                    font_path,
-                    preset.size,
-                    colon_visible,
-                )
-                await manager.send_image(image, delay=0.15)
-                last_stamp = stamp
-                last_colon = colon_visible
-            await asyncio.sleep(interval)
+    try:
+        async with PanelManager(config) as manager:
+            canvas = manager.canvas_size
+            while True:
+                now = datetime.now(tz)
+                if preset.format == "12h":
+                    stamp = now.strftime("%I:%M")
+                    if stamp.startswith("0"):
+                        stamp = stamp[1:]
+                else:
+                    stamp = now.strftime("%H:%M")
+                elapsed = loop.time() - start_time
+                colon_visible = True
+                if dot_flashing:
+                    colon_visible = int(elapsed / flash_period) % 2 == 0
+                if stamp != last_stamp or colon_visible != last_colon:
+                    image = build_clock_image(
+                        canvas,
+                        stamp,
+                        color,
+                        accent,
+                        background,
+                        font_path,
+                        preset.size,
+                        colon_visible,
+                    )
+                    await manager.send_image(image, delay=0.15)
+                    last_stamp = stamp
+                    last_colon = colon_visible
+                await asyncio.sleep(interval)
+    except asyncio.CancelledError:
+        raise
+    except Exception as error:
+        print("ERROR", str(error))
 
 
 def parse_args() -> argparse.Namespace:
@@ -165,5 +179,8 @@ if __name__ == "__main__":
         config.device = replace(config.device, address=args.address)
     preset_name = args.preset or config.runtime.preset or "default"
     overrides = build_override_map(args)
-    asyncio.run(run_clock(config, preset_name, overrides))
+    try:
+        asyncio.run(run_clock(config, preset_name, overrides))
+    except KeyboardInterrupt:
+        pass
 

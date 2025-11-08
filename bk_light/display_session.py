@@ -4,6 +4,7 @@ import os
 from io import BytesIO
 from typing import Optional
 from bleak import BleakClient
+from bleak.exc import BleakError
 from PIL import Image, ImageEnhance
 
 DEFAULT_ADDRESS = os.getenv("BK_LIGHT_ADDRESS")
@@ -39,7 +40,7 @@ def build_frame(png_bytes: bytes) -> bytes:
 def adjust_image(png_bytes: bytes, rotation: int, brightness: float) -> bytes:
     image = Image.open(BytesIO(png_bytes)).convert("RGB")
     if rotation:
-        image = image.rotate(rotation, expand=False)
+        image = image.rotate(rotation % 360, expand=False)
     if brightness != 1.0:
         enhancer = ImageEnhance.Brightness(image)
         image = enhancer.enhance(brightness)
@@ -77,8 +78,10 @@ async def wait_for_ack(event: asyncio.Event, label: str, verbose: bool) -> None:
         await asyncio.wait_for(event.wait(), timeout=5.0)
         if verbose:
             print(label + "_OK")
-    except asyncio.TimeoutError:
-        print(label + "_TIMEOUT")
+    except asyncio.TimeoutError as timeout_error:
+        if verbose:
+            print(label + "_TIMEOUT")
+        raise timeout_error
 
 
 class BleDisplaySession:
@@ -91,6 +94,7 @@ class BleDisplaySession:
         brightness: float = 1.0,
         mtu: int = 512,
         log_notifications: bool = False,
+        max_retries: int = 3,
     ) -> None:
         resolved = address or DEFAULT_ADDRESS
         if not resolved:
@@ -102,12 +106,37 @@ class BleDisplaySession:
         self.brightness = brightness
         self.mtu = mtu
         self.log_notifications = log_notifications
-        self.client = BleakClient(resolved)
+        self.max_retries = max_retries
+        self.client: Optional[BleakClient] = None
         self.watcher = AckWatcher(log_notifications)
 
+    async def _safe_disconnect(self) -> None:
+        if self.client is None:
+            return
+        try:
+            if self.client.is_connected:
+                try:
+                    await self.client.stop_notify(UUID_NOTIFY)
+                except Exception:
+                    pass
+                await asyncio.sleep(0.1)
+            await self.client.disconnect()
+        except Exception:
+            pass
+        finally:
+            self.client = None
+
     async def _connect(self) -> None:
+        attempt = 0
         while True:
+            attempt += 1
             try:
+                if self.client and self.client.is_connected:
+                    return
+                if self.client:
+                    await self._safe_disconnect()
+                self.client = BleakClient(self.address)
+                self.watcher = AckWatcher(self.log_notifications)
                 await self.client.connect()
                 if not self.client.is_connected:
                     raise ConnectionError("Bluetooth link failed")
@@ -119,21 +148,21 @@ class BleDisplaySession:
                 await self.client.start_notify(UUID_NOTIFY, self.watcher.handler)
                 return
             except Exception as error:
-                if not self.auto_reconnect:
+                if not self.auto_reconnect or attempt > self.max_retries:
+                    await self._safe_disconnect()
                     raise error
                 await asyncio.sleep(self.reconnect_delay)
+
+    async def _ensure_connected(self) -> None:
+        if not self.client or not self.client.is_connected:
+            await self._connect()
 
     async def __aenter__(self) -> "BleDisplaySession":
         await self._connect()
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
-        try:
-            if self.client.is_connected:
-                await self.client.stop_notify(UUID_NOTIFY)
-                await asyncio.sleep(0.2)
-        finally:
-            await self.client.disconnect()
+        await self._safe_disconnect()
 
     async def send_png(self, png_bytes: bytes, delay: float = 0.2) -> None:
         processed = adjust_image(png_bytes, self.rotation, self.brightness)
@@ -141,24 +170,34 @@ class BleDisplaySession:
         await self.send_frame(frame, delay)
 
     async def send_frame(self, frame: bytes, delay: float = 0.2) -> None:
-        try:
-            self.watcher.reset()
-            await self.client.write_gatt_char(UUID_WRITE, HANDSHAKE_FIRST, response=False)
-            await wait_for_ack(self.watcher.stage_one, "HANDSHAKE_STAGE_ONE", self.log_notifications)
-            await asyncio.sleep(delay)
-            self.watcher.stage_two.clear()
-            await self.client.write_gatt_char(UUID_WRITE, HANDSHAKE_SECOND, response=False)
-            await wait_for_ack(self.watcher.stage_two, "HANDSHAKE_STAGE_TWO", self.log_notifications)
-            await asyncio.sleep(delay)
-            await self.client.write_gatt_char(UUID_WRITE, frame, response=True)
-            await wait_for_ack(self.watcher.stage_three, "FRAME_ACK", self.log_notifications)
-            await asyncio.sleep(delay)
-            await self.client.write_gatt_char(UUID_WRITE, FRAME_VALIDATION, response=False)
-        except Exception:
-            if self.auto_reconnect:
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                await self._ensure_connected()
+                self.watcher.reset()
+                await self.client.write_gatt_char(UUID_WRITE, HANDSHAKE_FIRST, response=False)
+                await wait_for_ack(self.watcher.stage_one, "HANDSHAKE_STAGE_ONE", self.log_notifications)
+                await asyncio.sleep(delay)
+                self.watcher.stage_two.clear()
+                await self.client.write_gatt_char(UUID_WRITE, HANDSHAKE_SECOND, response=False)
+                await wait_for_ack(self.watcher.stage_two, "HANDSHAKE_STAGE_TWO", self.log_notifications)
+                await asyncio.sleep(delay)
+                await self.client.write_gatt_char(UUID_WRITE, frame, response=True)
+                await wait_for_ack(self.watcher.stage_three, "FRAME_ACK", self.log_notifications)
+                await asyncio.sleep(delay)
+                await self.client.write_gatt_char(UUID_WRITE, FRAME_VALIDATION, response=False)
+                return
+            except (asyncio.TimeoutError, BleakError, ConnectionError) as error:
+                if not self.auto_reconnect or attempt > self.max_retries:
+                    await self._safe_disconnect()
+                    raise error
+                await self._safe_disconnect()
                 await asyncio.sleep(self.reconnect_delay)
-                await self._connect()
-                await self.send_frame(frame, delay)
-            else:
-                raise
+            except Exception as error:
+                if not self.auto_reconnect or attempt > self.max_retries:
+                    await self._safe_disconnect()
+                    raise error
+                await self._safe_disconnect()
+                await asyncio.sleep(self.reconnect_delay)
 

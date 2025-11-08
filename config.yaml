@@ -2,7 +2,7 @@ device:
   address: "F0:27:3C:1A:8B:C3"
   auto_reconnect: true
   reconnect_delay: 2.0
-  mtu: 512
+  mtu: 128
   rotate: 0
   brightness: 0.85
   timezone: auto
@@ -23,16 +23,16 @@ display:
 presets:
   clock:
     default:
-      format: 12h
+      format: 24h
       theme: dark
       color: "#E2E8FF"
       accent: "#6E7DFF"
       background: "#000000"
       font: null
-      size: 20
-      interval: 0.5
+      size: 19
+      interval: 0.25
       dot_flashing: true
-      dot_flash_period: 1.0
+      dot_flash_period: 0.5
   text:
     default:
       color: "#FF0000"

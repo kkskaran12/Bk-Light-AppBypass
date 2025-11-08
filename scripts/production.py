@@ -1,12 +1,22 @@
 import argparse
 import asyncio
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Dict, Optional
-from clock_display import run_clock
-from display_text import display_text
-from increment_counter import run_counter
-from send_image import send_image
+
+if __package__ is None or __package__ == "":
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    from scripts.clock_display import run_clock
+    from scripts.display_text import display_text
+    from scripts.increment_counter import run_counter
+    from scripts.send_image import send_image
+else:
+    from scripts.clock_display import run_clock
+    from scripts.display_text import display_text
+    from scripts.increment_counter import run_counter
+    from scripts.send_image import send_image
+
 from bk_light.config import AppConfig, load_config
 
 

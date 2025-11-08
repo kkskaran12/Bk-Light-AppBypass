@@ -1,9 +1,15 @@
 import asyncio
+import sys
 from io import BytesIO
 from pathlib import Path
 from typing import List
 from bleak import BleakScanner
 from PIL import Image, ImageOps
+
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
+
 from bk_light.display_session import BleDisplaySession
 
 PREFIXES = ("LED_BLE_", "BK_LIGHT", "BJ_LED")

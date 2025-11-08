@@ -118,11 +118,11 @@ class RuntimeConfig:
 
 @dataclass
 class AppConfig:
-    device: DeviceConfig = DeviceConfig()
-    display: DisplayConfig = DisplayConfig()
-    panels: PanelsConfig = PanelsConfig()
-    presets: PresetLibrary = PresetLibrary()
-    runtime: RuntimeConfig = RuntimeConfig()
+    device: DeviceConfig = field(default_factory=DeviceConfig)
+    display: DisplayConfig = field(default_factory=DisplayConfig)
+    panels: PanelsConfig = field(default_factory=PanelsConfig)
+    presets: PresetLibrary = field(default_factory=PresetLibrary)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
 
 
 DEFAULTS: Dict[str, Any] = {

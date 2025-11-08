@@ -1,10 +1,16 @@
 import argparse
 import asyncio
+import sys
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
+
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
+
 from bk_light.config import AppConfig, PanelDescriptor, load_config
 from bk_light.display_session import BleDisplaySession
 
