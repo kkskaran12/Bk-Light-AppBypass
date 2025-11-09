@@ -60,6 +60,9 @@ def build_clock_image(
     antialias: bool,
     offset_x: int,
     offset_y: int,
+    colon_dx: int,
+    colon_top_adjust: int,
+    colon_bottom_adjust: int,
 ) -> Image.Image:
     font = load_font(font_path, size)
     mask_mode = "L" if antialias else "1"
@@ -133,8 +136,51 @@ def build_clock_image(
         gap = digit_height * 0.35
         colon_column = origin_x + left_segment.width
         colon_column = max(0, min(canvas[0] - 1, colon_column))
-        top = int(round(baseline - gap))
-        bottom = int(round(baseline + gap)) - 1
+        top = int(round(baseline - gap)) + 7
+        bottom = int(round(baseline + gap)) + 6
+
+        # aldopc
+        # top = int(round(baseline - gap)) + 7
+        # bottom = int(round(baseline + gap)) + 8
+
+        #kenyancoffeerg
+        # colon_column = origin_x + left_segment.width +1
+        # colon_column = max(0, min(canvas[0] - 1, colon_column))
+        # top = int(round(baseline - gap)) + 8
+        # bottom = int(round(baseline + gap)) + 9
+
+        # kimberleybl
+        # colon_column = origin_x + left_segment.width
+        # colon_column = max(0, min(canvas[0] - 1, colon_column))
+        # top = int(round(baseline - gap)) + 7
+        # bottom = int(round(baseline + gap)) + 6
+
+
+
+        if colon_visible:
+            for row in (top, bottom):
+                if 0 <= row < canvas[1]:
+                    frame_rgb.putpixel((colon_column, row), accent)
+        else:
+            for row in range(top, bottom + 1):
+                if 0 <= row < canvas[1]:
+                    frame_rgb.putpixel((colon_column, row), background)
+    if right_text:
+        colon_column = origin_x + left_segment.width + colon_dx
+        colon_column = max(0, min(canvas[0] - 1, colon_column))
+        base_top = int(round(baseline - gap))
+        base_bottom = int(round(baseline + gap))
+        top = base_top + colon_top_adjust
+        bottom = base_bottom + colon_bottom_adjust
+        if bottom < top:
+            top, bottom = bottom, top
+        if bottom == top:
+            if bottom < canvas[1] - 1:
+                bottom += 1
+            elif top > 0:
+                top -= 1
+        top = max(0, min(canvas[1] - 1, top))
+        bottom = max(0, min(canvas[1] - 1, bottom))
         if colon_visible:
             for row in (top, bottom):
                 if 0 <= row < canvas[1]:
@@ -156,11 +202,12 @@ async def run_clock(config: AppConfig, preset_name: str, overrides: dict[str, Op
     font_path = resolve_font(font_ref)
     profile = get_font_profile(font_ref, font_path)
     if overrides.get("size") is not None:
-        size = int(overrides["size"]) if overrides["size"] is not None else preset.size
+        size = int(overrides["size"])
     elif profile.recommended_size is not None:
-        size = profile.recommended_size
+        size = int(profile.recommended_size)
     else:
         size = preset.size
+    size = max(1, int(round(size)))
     interval = preset.interval
     dot_flashing = preset.dot_flashing
     flash_period = preset.dot_flash_period
@@ -196,6 +243,9 @@ async def run_clock(config: AppConfig, preset_name: str, overrides: dict[str, Op
                         config.display.antialias_text,
                         profile.offset_x,
                         profile.offset_y,
+                        profile.colon_dx,
+                        profile.colon_top_adjust,
+                        profile.colon_bottom_adjust,
                     )
                     await manager.send_image(image, delay=0.15)
                     last_stamp = stamp

@@ -63,9 +63,10 @@ async def run_counter(config: AppConfig, preset_name: str, overrides: dict[str, 
     font_path = resolve_font(font_ref)
     profile = get_font_profile(font_ref, font_path)
     if profile.recommended_size is not None:
-        size = profile.recommended_size
+        size = int(profile.recommended_size)
     else:
         size = text_preset.size
+    size = max(1, int(round(size)))
     spacing = text_preset.spacing
     offset_x = text_preset.offset_x + profile.offset_x
     offset_y = text_preset.offset_y + profile.offset_y

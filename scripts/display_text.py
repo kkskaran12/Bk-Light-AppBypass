@@ -76,11 +76,12 @@ async def display_text(config: AppConfig, message: str, preset_name: str, overri
     font_path = resolve_font(font_ref)
     profile = get_font_profile(font_ref, font_path)
     if overrides.get("size") is not None:
-        size = int(overrides["size"]) if overrides["size"] is not None else preset.size
+        size = int(overrides["size"])
     elif profile.recommended_size is not None:
-        size = profile.recommended_size
+        size = int(profile.recommended_size)
     else:
         size = preset.size
+    size = max(1, int(round(size)))
     spacing_override = overrides.get("spacing")
     spacing = int(spacing_override) if spacing_override is not None else preset.spacing
     text_bitmap = build_text_bitmap(
