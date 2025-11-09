@@ -26,15 +26,6 @@ def parse_color(value: str) -> tuple[int, int, int]:
     raise ValueError("Invalid color")
 
 
-def load_font(path: Optional[Path], size: int) -> ImageFont.ImageFont:
-    if path is None:
-        return ImageFont.load_default()
-    try:
-        return ImageFont.truetype(str(path), size)
-    except Exception:
-        return ImageFont.load_default()
-
-
 def build_counter_image(
     canvas: tuple[int, int],
     value: int,
