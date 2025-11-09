@@ -4,15 +4,16 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 project_root = Path(__file__).resolve().parents[1]
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 from bk_light.config import AppConfig, load_config, text_options
-from bk_light.fonts import resolve_font
+from bk_light.fonts import get_font_profile, resolve_font
 from bk_light.panel_manager import PanelManager
+from bk_light.text import build_text_bitmap
 
 
 def parse_color(value: Optional[str]) -> Optional[tuple[int, int, int]]:
@@ -25,43 +26,6 @@ def parse_color(value: Optional[str]) -> Optional[tuple[int, int, int]]:
     if len(cleaned) == 6:
         return tuple(int(cleaned[i:i + 2], 16) for i in (0, 2, 4))
     raise ValueError("Invalid color")
-
-
-def load_font(path: Optional[Path], size: int) -> ImageFont.ImageFont:
-    if path is None:
-        return ImageFont.load_default()
-    try:
-        return ImageFont.truetype(str(path), size)
-    except Exception:
-        return ImageFont.load_default()
-
-
-def build_text_bitmap(
-    text: str,
-    font_path: Optional[Path],
-    size: int,
-    spacing: int,
-    color: tuple[int, int, int],
-    antialias: bool,
-) -> Image.Image:
-    font = load_font(font_path, size)
-    formatted = text.replace("\\n", "\n")
-    dummy_mode = "L" if antialias else "1"
-    dummy = Image.new(dummy_mode, (1, 1), 0)
-    draw_dummy = ImageDraw.Draw(dummy)
-    bbox = draw_dummy.multiline_textbbox((0, 0), formatted, font=font, spacing=spacing, align="left")
-    width = max(1, bbox[2] - bbox[0])
-    height = max(1, bbox[3] - bbox[1])
-    mask_mode = "L" if antialias else "1"
-    mask = Image.new(mask_mode, (width, height), 0)
-    draw_mask = ImageDraw.Draw(mask)
-    draw_mask.multiline_text((-bbox[0], -bbox[1]), formatted, fill=255, font=font, spacing=spacing, align="left")
-    if not antialias:
-        mask = mask.convert("L")
-    bitmap = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    fill = Image.new("RGBA", (width, height), (*color, 255))
-    bitmap = Image.composite(fill, bitmap, mask)
-    return bitmap
 
 
 def render_static_frame(
@@ -110,20 +74,38 @@ async def display_text(config: AppConfig, message: str, preset_name: str, overri
     background = parse_color(overrides.get("background")) or parse_color(preset.background)
     font_ref = overrides.get("font") or preset.font
     font_path = resolve_font(font_ref)
+    profile = get_font_profile(font_ref, font_path)
+    if overrides.get("size") is not None:
+        size = int(overrides["size"]) if overrides["size"] is not None else preset.size
+    elif profile.recommended_size is not None:
+        size = profile.recommended_size
+    else:
+        size = preset.size
+    spacing_override = overrides.get("spacing")
+    spacing = int(spacing_override) if spacing_override is not None else preset.spacing
     text_bitmap = build_text_bitmap(
         message,
         font_path,
-        preset.size,
-        preset.spacing,
+        size,
+        spacing,
         color,
         config.display.antialias_text,
+        monospace_digits=True,
     )
+    offset_x_base = preset.offset_x + profile.offset_x
+    offset_y_base = preset.offset_y + profile.offset_y
     try:
         async with PanelManager(config) as manager:
             canvas = manager.canvas_size
             if preset.mode == "scroll":
-                strip_width = max(1, text_bitmap.width + preset.gap)
-                step = max(1, int(preset.step))
+                gap_override = overrides.get("gap")
+                base_gap = gap_override if gap_override is not None else preset.gap
+                gap = int(base_gap) if base_gap is not None else 0
+                strip_width = max(1, text_bitmap.width + gap)
+                step_override = overrides.get("step")
+                base_step = step_override if step_override is not None else preset.step
+                step_value = int(base_step) if base_step is not None else 1
+                step = max(1, step_value)
                 position = 0
                 while True:
                     frame = render_scroll_frame(
@@ -131,9 +113,9 @@ async def display_text(config: AppConfig, message: str, preset_name: str, overri
                         text_bitmap,
                         background,
                         preset.direction,
-                        preset.gap,
-                        preset.offset_x,
-                        preset.offset_y,
+                        gap,
+                        offset_x_base,
+                        offset_y_base,
                         position,
                     )
                     await manager.send_image(frame, delay=0.1)
@@ -144,8 +126,8 @@ async def display_text(config: AppConfig, message: str, preset_name: str, overri
                     canvas,
                     text_bitmap,
                     background,
-                    preset.offset_x,
-                    preset.offset_y,
+                    offset_x_base,
+                    offset_y_base,
                 )
                 await manager.send_image(frame, delay=0.15)
                 await asyncio.sleep(0.2)

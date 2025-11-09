@@ -7,7 +7,7 @@ if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 from bk_light.config import load_config
-from bk_light.fonts import list_available_fonts
+from bk_light.fonts import get_font_profile, list_available_fonts
 
 
 def parse_args() -> argparse.Namespace:
@@ -21,7 +21,14 @@ def main() -> None:
     fonts = list_available_fonts()
     if fonts:
         for name in fonts:
-            print(name)
+            profile = get_font_profile(name)
+            details = []
+            if profile.recommended_size is not None:
+                details.append(f"size {profile.recommended_size}")
+            if profile.offset_x or profile.offset_y:
+                details.append(f"offset ({profile.offset_x}, {profile.offset_y})")
+            suffix = f" ({', '.join(details)})" if details else ""
+            print(f"{name}{suffix}")
     else:
         print("No fonts found in assets/fonts")
 

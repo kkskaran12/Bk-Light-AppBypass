@@ -12,7 +12,7 @@ if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 from bk_light.config import AppConfig, clock_options, load_config
-from bk_light.fonts import resolve_font
+from bk_light.fonts import get_font_profile, resolve_font
 from bk_light.panel_manager import PanelManager
 
 
@@ -58,66 +58,83 @@ def build_clock_image(
     size: int,
     colon_visible: bool,
     antialias: bool,
+    offset_x: int,
+    offset_y: int,
 ) -> Image.Image:
     font = load_font(font_path, size)
-    dummy = Image.new("L", (1, 1), 0)
+    mask_mode = "L" if antialias else "1"
+    dummy = Image.new(mask_mode, (1, 1), 0)
     draw_dummy = ImageDraw.Draw(dummy)
+    digit_glyphs: dict[str, Image.Image] = {}
+    digit_bboxes: dict[str, tuple[int, int, int, int]] = {}
+    max_digit_width = 1
+    digit_top: Optional[int] = None
+    digit_bottom: Optional[int] = None
+    for value in range(10):
+        char = str(value)
+        bbox = draw_dummy.textbbox((0, 0), char, font=font)
+        if bbox is None:
+            continue
+        digit_bboxes[char] = bbox
+        width = max(1, bbox[2] - bbox[0])
+        height = max(1, bbox[3] - bbox[1])
+        max_digit_width = max(max_digit_width, width)
+        digit_top = bbox[1] if digit_top is None else min(digit_top, bbox[1])
+        digit_bottom = bbox[3] if digit_bottom is None else max(digit_bottom, bbox[3])
+        mask = Image.new(mask_mode, (width, height), 0)
+        draw_mask = ImageDraw.Draw(mask)
+        draw_mask.text((-bbox[0], -bbox[1]), char, fill=255, font=font)
+        if not antialias:
+            mask = mask.convert("L")
+        layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        fill_layer = Image.new("RGBA", (width, height), (*color, 255))
+        glyph = Image.composite(fill_layer, layer, mask)
+        digit_glyphs[char] = glyph
+    if digit_top is None or digit_bottom is None:
+        digit_top = 0
+        digit_bottom = size
+    digit_height = max(1, digit_bottom - digit_top)
+    def render_segment(segment: str) -> Image.Image:
+        if not segment:
+            return Image.new("RGBA", (1, digit_height), (0, 0, 0, 0))
+        length = len(segment)
+        segment_width = length * max_digit_width
+        segment_image = Image.new("RGBA", (segment_width, digit_height), (0, 0, 0, 0))
+        position = 0
+        for char in segment:
+            glyph = digit_glyphs.get(char)
+            bbox = digit_bboxes.get(char)
+            if glyph is None or bbox is None:
+                position += max_digit_width
+                continue
+            padding = (max_digit_width - glyph.width) // 2
+            y_offset = bbox[1] - digit_top
+            segment_image.alpha_composite(glyph, (position + padding, y_offset))
+            position += max_digit_width
+        return segment_image
     parts = text.split(":", 1)
     left_text = parts[0]
     right_text = parts[1] if len(parts) > 1 else ""
-
-    def render_segment(segment: str) -> tuple[Image.Image, tuple[int, int, int, int]]:
-        if not segment:
-            empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
-            return empty, (0, 0, 0, 0)
-        bbox = draw_dummy.textbbox((0, 0), segment, font=font)
-        width = max(1, bbox[2] - bbox[0])
-        height = max(1, bbox[3] - bbox[1])
-        mask_mode = "L" if antialias else "1"
-        mask = Image.new(mask_mode, (width, height), 0)
-        draw_mask = ImageDraw.Draw(mask)
-        draw_mask.text((-bbox[0], -bbox[1]), segment, fill=255, font=font)
-        if not antialias:
-            mask = mask.convert("L")
-        text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        fill_layer = Image.new("RGBA", (width, height), (*color, 255))
-        text_layer = Image.composite(fill_layer, text_layer, mask)
-        return text_layer, bbox
-
-    left_segment, left_bbox = render_segment(left_text)
-    right_segment, right_bbox = render_segment(right_text)
-    left_width = draw_dummy.textlength(left_text, font=font)
-    right_width = draw_dummy.textlength(right_text, font=font)
-    colon_width = draw_dummy.textlength(":", font=font) if right_text else 0
+    left_segment = render_segment(left_text)
+    right_segment = render_segment(right_text)
     extra_gap = 1 if right_text else 0
-    total_width = max(1, int(round(left_width + colon_width + extra_gap + right_width)))
-    max_height = max(left_segment.height, right_segment.height, 1)
-
+    colon_width = 1 if right_text else 0
+    total_width = left_segment.width + extra_gap + colon_width + right_segment.width
     frame = Image.new("RGBA", canvas, tuple(background) + (255,))
-    base_x = int((canvas[0] - total_width) // 2)
-    base_y = int((canvas[1] - max_height) // 2)
-
-    frame.alpha_composite(left_segment, (base_x - left_bbox[0], base_y - left_bbox[1]))
+    origin_x = int((canvas[0] - total_width) // 2) + offset_x
+    origin_y = int((canvas[1] - digit_height) // 2) + offset_y
+    frame.alpha_composite(left_segment, (origin_x, origin_y))
     if right_text:
-        frame.alpha_composite(
-            right_segment,
-            (
-                base_x + int(round(left_width + colon_width + extra_gap)) - right_bbox[0],
-                base_y - right_bbox[1],
-            ),
-        )
-
+        right_x = origin_x + left_segment.width + extra_gap + colon_width
+        frame.alpha_composite(right_segment, (right_x, origin_y))
     frame_rgb = frame.convert("RGB")
     if right_text:
-        colon_center_x = base_x + left_width + colon_width / 2
-        digit_bbox = draw_dummy.textbbox((0, 0), "0", font=font)
-        digit_height = digit_bbox[3] - digit_bbox[1]
-        baseline = base_y - digit_bbox[1] + digit_height / 2
+        baseline = origin_y - digit_top
         gap = digit_height * 0.35
-        colon_column = int(round(colon_center_x))
+        colon_column = origin_x + left_segment.width
+        colon_column = max(0, min(canvas[0] - 1, colon_column))
         top = int(round(baseline - gap))
         bottom = int(round(baseline + gap)) - 1
-        colon_column = max(0, min(canvas[0] - 1, colon_column))
         if colon_visible:
             for row in (top, bottom):
                 if 0 <= row < canvas[1]:
@@ -137,6 +154,13 @@ async def run_clock(config: AppConfig, preset_name: str, overrides: dict[str, Op
     background = parse_color(overrides.get("background")) or parse_color(preset.background)
     font_ref = overrides.get("font") or preset.font
     font_path = resolve_font(font_ref)
+    profile = get_font_profile(font_ref, font_path)
+    if overrides.get("size") is not None:
+        size = int(overrides["size"]) if overrides["size"] is not None else preset.size
+    elif profile.recommended_size is not None:
+        size = profile.recommended_size
+    else:
+        size = preset.size
     interval = preset.interval
     dot_flashing = preset.dot_flashing
     flash_period = preset.dot_flash_period
@@ -167,9 +191,11 @@ async def run_clock(config: AppConfig, preset_name: str, overrides: dict[str, Op
                         accent,
                         background,
                         font_path,
-                        preset.size,
+                        size,
                         colon_visible,
                         config.display.antialias_text,
+                        profile.offset_x,
+                        profile.offset_y,
                     )
                     await manager.send_image(image, delay=0.15)
                     last_stamp = stamp

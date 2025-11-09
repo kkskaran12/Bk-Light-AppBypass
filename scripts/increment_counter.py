@@ -4,15 +4,16 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 project_root = Path(__file__).resolve().parents[1]
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 from bk_light.config import AppConfig, counter_options, load_config, text_options
-from bk_light.fonts import resolve_font
+from bk_light.fonts import get_font_profile, resolve_font
 from bk_light.panel_manager import PanelManager
+from bk_light.text import build_text_bitmap
 
 
 def parse_color(value: str) -> tuple[int, int, int]:
@@ -41,28 +42,24 @@ def build_counter_image(
     background: tuple[int, int, int],
     font_path: Optional[Path],
     size: int,
+    spacing: int,
+    offset_x: int,
+    offset_y: int,
     antialias: bool,
 ) -> Image.Image:
-    font = load_font(font_path, size)
-    text = str(value)
-    dummy = Image.new("L", (1, 1), 0)
-    draw_dummy = ImageDraw.Draw(dummy)
-    bbox = draw_dummy.textbbox((0, 0), text, font=font)
-    width = max(1, bbox[2] - bbox[0])
-    height = max(1, bbox[3] - bbox[1])
-    mask_mode = "L" if antialias else "1"
-    mask = Image.new(mask_mode, (width, height), 0)
-    draw_mask = ImageDraw.Draw(mask)
-    draw_mask.text((-bbox[0], -bbox[1]), text, fill=255, font=font)
-    if not antialias:
-        mask = mask.convert("L")
-    text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    fill_layer = Image.new("RGBA", (width, height), (*color, 255))
-    text_layer = Image.composite(fill_layer, text_layer, mask)
+    text_bitmap = build_text_bitmap(
+        str(value),
+        font_path,
+        size,
+        spacing,
+        color,
+        antialias,
+        monospace_digits=True,
+    )
     frame = Image.new("RGBA", canvas, tuple(background) + (255,))
-    origin_x = int((canvas[0] - width) / 2 - bbox[0])
-    origin_y = int((canvas[1] - height) / 2 - bbox[1])
-    frame.alpha_composite(text_layer, (origin_x, origin_y))
+    origin_x = (canvas[0] - text_bitmap.width) // 2 + offset_x
+    origin_y = (canvas[1] - text_bitmap.height) // 2 + offset_y
+    frame.paste(text_bitmap, (origin_x, origin_y), text_bitmap)
     return frame.convert("RGB")
 
 
@@ -73,7 +70,14 @@ async def run_counter(config: AppConfig, preset_name: str, overrides: dict[str, 
     background = parse_color(text_preset.background)
     font_ref = text_preset.font
     font_path = resolve_font(font_ref)
-    size = text_preset.size
+    profile = get_font_profile(font_ref, font_path)
+    if profile.recommended_size is not None:
+        size = profile.recommended_size
+    else:
+        size = text_preset.size
+    spacing = text_preset.spacing
+    offset_x = text_preset.offset_x + profile.offset_x
+    offset_y = text_preset.offset_y + profile.offset_y
     start = overrides.get("start")
     count = overrides.get("count")
     delay = overrides.get("delay")
@@ -91,6 +95,9 @@ async def run_counter(config: AppConfig, preset_name: str, overrides: dict[str, 
                 background,
                 font_path,
                 size,
+                spacing,
+                offset_x,
+                offset_y,
                 config.display.antialias_text,
             )
             await manager.send_image(image, delay=0.15)

@@ -176,14 +176,12 @@ The tools assume the screen advertises as `LED_BLE_*` (BK-Light firmware). Updat
 - `scripts/identify_panels.py` – flashes digits on each configured panel.
 - `scripts/list_fonts.py`
 
-  Prints the fonts resolved from `assets/fonts/`. Bundled names today:
-  - `Aldo PC`
-  - `CaviarDreams`
-  - `Dolce Vita Light`
-  - `Eight One`
-  - `GeosansLight`
-  - `Kenyan Coffee Rg`
-  - `Kimberley Bl`
+  Prints the fonts resolved from `assets/fonts/`. Bundled names and defaults:
+  - `Aldo PC` → size 16, offset (+1, +4)
+  - `CaviarDreams` → size 16, offset (0, 0)
+  - `Dolce Vita Light` → size 14, offset (0, +4)
+  - `Kenyan Coffee Rg` → size 15, offset (0, +4)
+  - `Kimberley Bl` → size 11, offset (0, +7)
 
   ```bash
   python scripts/list_fonts.py [--config config.yaml]
